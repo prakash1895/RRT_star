@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-
 import sys, random, math, pygame
 from pygame.locals import *
 from math import sqrt,cos,sin,atan2
@@ -38,14 +37,6 @@ def step_from_to(p1,p2):
 		theta = atan2(p2[1]-p1[1],p2[0]-p1[0])
 		return p1[0] + EPSILON*cos(theta), p1[1] + EPSILON*sin(theta)
 
-def chooseParent(nn,newnode,nodes):
-		for p in nodes:
-			if checkIntersect(p,newnode,OBS) and dist([p.x,p.y],[newnode.x,newnode.y]) < RADIUS and p.cost+dist([p.x,p.y],[newnode.x,newnode.y]) < nn.cost+dist([nn.x,nn.y],[newnode.x,newnode.y]):
-				nn = p
-			newnode.cost = nn.cost+dist([nn.x,nn.y],[newnode.x,newnode.y])
-			newnode.parent = nn
-		return newnode,nn
-
 def drawPath(nodes, pygame, screen):
 	last_node = nodes[-1]
 	start = nodes[0]
@@ -66,6 +57,7 @@ def main():
 	black = 20, 20, 40
 	screen.fill(white)
 	obsDraw(pygame,screen)
+	pygame.image.save(screen, "environment.jpg")
 	nodes = []
 	
 	start = Node(0.0, 0.0)     # Start in the corner
@@ -87,15 +79,17 @@ def main():
 		newnode = Node(interpolatedNode[0],interpolatedNode[1])
 
 		if checkIntersect(nn,newnode,OBS):
-			[newnode,nn]=chooseParent(nn,newnode,nodes)
+			newnode.cost = nn.cost + dist([nn.x,nn.y],[newnode.x,newnode.y])
+			newnode.parent = nn
 			nodes.append(newnode)
 			pygame.draw.line(screen,black,[nn.x,nn.y],[newnode.x,newnode.y])
 
 		if checkgoal(newnode, goal):
 			print "Path found"
-			[goal, newnode] = chooseParent(newnode, goal, nodes)
+			goal.cost = newnode.cost + dist([newnode.x,newnode.y],[goal.x,goal.y])
+			goal.parent = newnode
 			nodes.append(goal)
-			
+			pygame.draw.line(screen,black,[newnode.x,newnode.y],[goal.x,goal.y])
 		pygame.display.update()
 		i += 1
 
@@ -115,7 +109,7 @@ def main():
 
 		drawPath(nodes, pygame, screen)
 		pygame.display.update()
-		pygame.image.save(screen, "rrt_star.jpg")
+		pygame.image.save(screen, "rrt.jpg")
 	else:
 		print "Path not found. Try increasing the number of iterations"
 

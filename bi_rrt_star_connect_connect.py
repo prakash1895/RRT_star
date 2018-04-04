@@ -5,18 +5,20 @@ from pygame.locals import *
 from math import sqrt,cos,sin,atan2
 from lineIntersect import *
 import time 
+
 #constants
 XDIM = 640
 YDIM = 480
 WINSIZE = [XDIM, YDIM]
-EPSILON = 7.0
+EPSILON = 10.0
 NUMNODES = 8000 
-RADIUS = 15.0
-TARGET_RADIUS = 500.0
+RADIUS = 30.0
+TARGET_RADIUS = 200.0
+STEP = 10.0
 OBS=[(50,0,50,300), (200,100,50,400), (350,0,50,300), (500,100,50,400)]
 
 class Node:
-	def __init__(self,xcoord=0, ycoord=0, cost=0, parent = None):
+	def __init__(self,xcoord=0, ycoord=0, cost=0, parent=None):
 		self.x = xcoord
 		self.y = ycoord
 		self.cost = cost
@@ -45,19 +47,16 @@ def chooseParent(nn,newnode,nodes):
 		newnode.parent = nn
 	return newnode,nn
 
-def check_target(newnode, q_target):
-	if dist([q_target.x, q_target.y], [newnode.x, newnode.y]) < EPSILON and checkIntersect(newnode, q_target, OBS):
-		return True
-	else:
-		return False
+def nearest_neighbor(nodes, q_target):
+	q_near = nodes[0]
+	for p in nodes:
+		if dist([p.x,p.y],[q_target.x,q_target.y]) < dist([q_near.x,q_near.y],[q_target.x,q_target.y]):
+			q_near = p
+	return q_near
 
 def extend(nodes, screen, black):
 	rand = Node(random.random()*XDIM, random.random()*YDIM)
-	nn = nodes[0]
-	for p in nodes:
-		if dist([p.x,p.y],[rand.x,rand.y]) < dist([nn.x,nn.y],[rand.x,rand.y]):
-			nn = p
-		
+	nn = nearest_neighbor(nodes, rand)
 	interpolatedNode= step_from_to([nn.x,nn.y],[rand.x,rand.y])
 	newnode = Node(interpolatedNode[0], interpolatedNode[1])
 
@@ -72,6 +71,41 @@ def extend(nodes, screen, black):
 			sys.exit("Leaving because you requested it.")
 	
 	return nodes
+
+def connect(start_nodes, q_near, q_target, screen, black):
+	
+	theta = atan2(q_target.y - q_near.y, q_target.x - q_near.x)
+	q_new_x = q_near.x + STEP*cos(theta)
+	q_new_y = q_near.y + STEP*sin(theta)
+	q_new_cost = q_near.cost + dist([q_near.x, q_near.y], [q_new_x, q_new_y])
+	q_new_parent = q_near
+	q_new = Node(q_new_x, q_new_y, q_new_cost, q_new_parent)
+	flag = False
+
+	while checkIntersect(q_near, q_new, OBS):
+		[q_new, q_near] = chooseParent(q_near, q_new, start_nodes)
+		start_nodes.append(q_new)
+		pygame.draw.line(screen, black, [q_near.x,q_near.y],[q_new.x,q_new.y])
+		pygame.display.update()
+
+		if q_new.x == q_target.x and q_new.y == q_target.y:
+			flag = True
+			break
+
+		q_near = q_new
+		theta = atan2(q_target.y - q_near.y, q_target.x - q_near.x)
+		if dist([q_target.x, q_target.y], [q_near.x, q_near.y]) > STEP:
+			q_new_x = q_near.x + STEP*cos(theta)
+			q_new_y = q_near.y + STEP*sin(theta)
+		else:
+			q_new_x = q_target.x
+			q_new_y = q_target.y
+		
+		q_new_cost = q_near.cost + dist([q_near.x, q_near.y], [q_new_x, q_new_y])
+		q_new_parent = q_near
+		q_new = Node(q_new_x, q_new_y, q_new_cost, q_new_parent)
+				
+	return start_nodes, flag
 
 def drawPath(nodes, pygame, screen):
 	last_node = nodes[-1]
@@ -99,35 +133,24 @@ def main():
 	start_nodes.append(start)
 	goal_nodes.append(goal)
 
-	q_nearest = None
-	q_target = goal_nodes[0]
-	
-	flag = False
 	i = 0
+	flag = False
 	start_time = time.time()
 	while i < NUMNODES and flag != True:
-		if (i%2 == 0):
-			start_nodes = extend(start_nodes, screen, black)
-		else:
-			goal_nodes  = extend(goal_nodes, screen, black)
-			q_target = goal_nodes[-1]
-		
-		q_near = start_nodes[0]
-		for p in start_nodes:
-			if dist([p.x,p.y],[q_target.x,q_target.y]) < dist([q_near.x,q_near.y],[q_target.x,q_target.y]):
-				q_near = p
 
-		# Connect q_near and q_target if dist is less than a target radius
+		rand = Node(random.random()*XDIM, random.random()*YDIM)
+		nn = nearest_neighbor(start_nodes, rand)
+		start_nodes, flag_dummy = connect(start_nodes, nn, rand, screen, black)
+		
+		rand = Node(random.random()*XDIM, random.random()*YDIM)
+		nn = nearest_neighbor(goal_nodes, rand)
+		goal_nodes, flag_dummy = connect(goal_nodes, nn, rand, screen, black)
+		q_target = goal_nodes[-1]
+		
+		# try to connect q_near and q_target if distance is less than a target radius
+		q_near = nearest_neighbor(start_nodes, q_target)	
 		if (dist([q_target.x, q_target.y], [q_near.x, q_near.y]) < TARGET_RADIUS):
-			if checkIntersect(q_near, q_target, OBS):
-				newnode = Node(q_target.x, q_target.y)
-				newnode.parent = q_near
-				newnode.cost = q_near.cost + dist([q_near.x, q_near.y], [newnode.x, newnode.y])
-				start_nodes.append(newnode)
-				pygame.draw.line(screen,black,[q_near.x,q_near.y],[newnode.x,newnode.y])
-				flag = True
-				print "Path found"
-				break
+			start_nodes, flag = connect(start_nodes, q_near, q_target, screen, black)
 
 		i += 1
 		for e in pygame.event.get():
@@ -138,8 +161,9 @@ def main():
 		end_time = time.time()
 		time_taken = end_time - start_time
 		total_cost = start_nodes[-1].cost + goal_nodes[-1].cost
+		print "Path Found"
 		print ""
-		print "Bi-directional RRT* Extend Stats"
+		print "Bi-directional RRT* Connect Stats"
 		print ""
 		print "Cost       : " + str(total_cost) + ' units'
 		print "Time Taken : " + str(time_taken) + ' sec'
@@ -147,8 +171,10 @@ def main():
 		drawPath(start_nodes, pygame, screen)
 		drawPath(goal_nodes, pygame, screen)
 		pygame.display.update()
+		pygame.image.save(screen, "bi_rrt_connect_both.jpg")
 	else:
 		print "Path not found. Try increasing the number of iterations"
+
 
 if __name__ == '__main__':
 	main()

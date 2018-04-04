@@ -10,15 +10,15 @@ import time
 XDIM = 640
 YDIM = 480
 WINSIZE = [XDIM, YDIM]
-EPSILON = 7.0
+EPSILON = 10.0
 NUMNODES = 8000 
-RADIUS = 15.0
-TARGET_RADIUS = 500.0
-STEP = 2.0
+RADIUS = 30.0
+TARGET_RADIUS = 200.0
+STEP = 10.0
 OBS=[(50,0,50,300), (200,100,50,400), (350,0,50,300), (500,100,50,400)]
 
 class Node:
-	def __init__(self,xcoord=0, ycoord=0, cost=0, parent = None):
+	def __init__(self,xcoord=0, ycoord=0, cost=0, parent=None):
 		self.x = xcoord
 		self.y = ycoord
 		self.cost = cost
@@ -47,19 +47,16 @@ def chooseParent(nn,newnode,nodes):
 		newnode.parent = nn
 	return newnode,nn
 
-def check_target(newnode, q_target):
-	if dist([q_target.x, q_target.y], [newnode.x, newnode.y]) < EPSILON and checkIntersect(newnode, q_target, OBS):
-		return True
-	else:
-		return False
+def nearest_neighbor(nodes, q_target):
+	q_near = nodes[0]
+	for p in nodes:
+		if dist([p.x,p.y],[q_target.x,q_target.y]) < dist([q_near.x,q_near.y],[q_target.x,q_target.y]):
+			q_near = p
+	return q_near
 
 def extend(nodes, screen, black):
 	rand = Node(random.random()*XDIM, random.random()*YDIM)
-	nn = nodes[0]
-	for p in nodes:
-		if dist([p.x,p.y],[rand.x,rand.y]) < dist([nn.x,nn.y],[rand.x,rand.y]):
-			nn = p
-		
+	nn = nearest_neighbor(nodes, rand)
 	interpolatedNode= step_from_to([nn.x,nn.y],[rand.x,rand.y])
 	newnode = Node(interpolatedNode[0], interpolatedNode[1])
 
@@ -76,7 +73,7 @@ def extend(nodes, screen, black):
 	return nodes
 
 def connect_start(start_nodes, q_near, q_target, screen, black):
-
+	
 	theta = atan2(q_target.y - q_near.y, q_target.x - q_near.x)
 	q_new_x = q_near.x + STEP*cos(theta)
 	q_new_y = q_near.y + STEP*sin(theta)
@@ -93,7 +90,6 @@ def connect_start(start_nodes, q_near, q_target, screen, black):
 
 		if q_new.x == q_target.x and q_new.y == q_target.y:
 			flag = True
-			print "Path found"
 			break
 
 		q_near = q_new
@@ -137,25 +133,20 @@ def main():
 	start_nodes.append(start)
 	goal_nodes.append(goal)
 
-	q_nearest = None
-	q_target = goal_nodes[0]
-
 	i = 0
 	flag = False
 	start_time = time.time()
 	while i < NUMNODES and flag != True:
-		if (i%2 == 0):
-			goal_nodes  = extend(goal_nodes, screen, black)
-			q_target = goal_nodes[-1]
-		else:
-			start_nodes = extend(start_nodes, screen, black)
-			
-		q_near = start_nodes[0]
-		for p in start_nodes:
-			if dist([p.x,p.y],[q_target.x,q_target.y]) < dist([q_near.x,q_near.y],[q_target.x,q_target.y]):
-				q_near = p
 
-		# Connect q_near and q_target if distance is less than target radius
+		rand = Node(random.random()*XDIM, random.random()*YDIM)
+		nn = nearest_neighbor(start_nodes, rand)
+		start_nodes, flag_dummy = connect_start(start_nodes, nn, rand, screen, black)
+		
+		goal_nodes  = extend(goal_nodes, screen, black)
+		q_target = goal_nodes[-1]
+
+		# try to connect q_near and q_target if distance is less than a target radius
+		q_near = nearest_neighbor(start_nodes, q_target)	
 		if (dist([q_target.x, q_target.y], [q_near.x, q_near.y]) < TARGET_RADIUS):
 			start_nodes, flag = connect_start(start_nodes, q_near, q_target, screen, black)
 
@@ -168,6 +159,7 @@ def main():
 		end_time = time.time()
 		time_taken = end_time - start_time
 		total_cost = start_nodes[-1].cost + goal_nodes[-1].cost
+		print "Path Found"
 		print ""
 		print "Bi-directional RRT* Connect Stats"
 		print ""
@@ -177,6 +169,7 @@ def main():
 		drawPath(start_nodes, pygame, screen)
 		drawPath(goal_nodes, pygame, screen)
 		pygame.display.update()
+		pygame.image.save(screen, "bi_rrt_connect_extend.jpg")
 	else:
 		print "Path not found. Try increasing the number of iterations"
 
